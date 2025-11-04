@@ -2,11 +2,17 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>JSON Formatter</title>
     <link rel="icon" type="image/svg+xml"
         href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%23fdf6e3'/%3E%3C/svg%3E">
+
+    <!-- Font: IBM Plex Mono (only the weights we use: 400) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400&display=swap" rel="stylesheet" />
+
     <style>
         * {
             margin: 0;
@@ -14,31 +20,32 @@
             box-sizing: border-box;
         }
 
+        html,
         body {
-            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            height: 100%;
+        }
+
+        body {
+            font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
             background: #fdf6e3;
             min-height: 100vh;
             padding: 40px;
             overflow: auto;
         }
 
-        .output-content {
+        /* Shiki output styling is applied inline; keep our base sizes consistent */
+        pre,
+        code {
+            font-family: inherit;
             font-size: 18px;
-            line-height: 2.0;
-        }
-
-        /* Shiki output styling */
-        pre {
-            margin: 0;
-            padding: 0;
-            font-size: 18px;
-            line-height: 2.0;
+            line-height: 2;
         }
 
         .error {
             color: #dc2626;
             font-size: 18px;
-            line-height: 2.0;
+            line-height: 2;
+            white-space: pre-wrap;
         }
 
         .hidden-input {
@@ -48,11 +55,18 @@
             height: 0;
             pointer-events: none;
         }
+
+        #outputArea:empty::before {
+            content: 'Paste or drop JSON anywhere on the page…';
+            opacity: 0.5;
+            display: block;
+            font-size: 16px;
+        }
     </style>
 </head>
 
 <body>
-    <div id="outputArea"></div>
+    <div id="outputArea" aria-live="polite"></div>
     <textarea class="hidden-input" id="inputText" autocomplete="off" spellcheck="false"></textarea>
 
     <script type="module">
@@ -98,42 +112,48 @@
         document.addEventListener('paste', (e) => {
             e.preventDefault();
             const pastedText = (e.clipboardData || window.clipboardData).getData('text');
-            if (pastedText) {
-                updateOutput(pastedText);
-            }
+            if (pastedText) updateOutput(pastedText);
         });
 
         // Handle drag and drop on the entire page
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            document.addEventListener(eventName, preventDefaults, false);
-        });
-
-        function preventDefaults(e) {
+        document.addEventListener('dragover', (e) => {
             e.preventDefault();
             e.stopPropagation();
-        }
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+        });
 
         document.addEventListener('drop', (e) => {
-            const dt = e.dataTransfer;
-            const files = dt.files;
+            e.preventDefault();
+            e.stopPropagation();
 
-            if (files.length > 0) {
-                const file = files[0];
-                if (file.type === 'application/json' || file.name.endsWith('.json')) {
+            const dt = e.dataTransfer;
+
+            // 1) Try plain text drops (selected text from another app/page)
+            if (dt) {
+                // Some browsers expose text via items, others via getData
+                if (dt.items && dt.items.length) {
+                    const textItem = Array.from(dt.items).find(i => i.kind === 'string');
+                    if (textItem) {
+                        textItem.getAsString(str => updateOutput(str));
+                        return;
+                    }
+                }
+                const text =
+                    dt.getData('text/plain') ||
+                    dt.getData('text') ||
+                    dt.getData('text/uri-list'); // e.g. if someone drops a URL to a JSON file
+                if (text) {
+                    updateOutput(text);
+                    return;
+                }
+
+                // 2) Fallback: handle files
+                if (dt.files && dt.files.length > 0) {
+                    const file = dt.files[0];
                     const reader = new FileReader();
-                    reader.onload = function (event) {
-                        const content = event.target.result;
-                        updateOutput(content);
-                    };
+                    reader.onload = (ev) => updateOutput(ev.target.result);
                     reader.readAsText(file);
-                } else {
-                    // Try to read as text anyway, might be JSON without .json extension
-                    const reader = new FileReader();
-                    reader.onload = function (event) {
-                        const content = event.target.result;
-                        updateOutput(content);
-                    };
-                    reader.readAsText(file);
+                    return;
                 }
             }
         });
