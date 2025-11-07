@@ -62,10 +62,54 @@
             display: block;
             font-size: 16px;
         }
+
+        .copy-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background: #fdf6e3;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 14px;
+            color: #586e75;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .copy-button.visible {
+            opacity: 1;
+            pointer-events: all;
+            cursor: pointer;
+        }
+
+        .copy-button:hover {
+            background: #eee8d5;
+            border-color: rgba(0, 0, 0, 0.15);
+            cursor: pointer;
+        }
+
+        .copy-button:active {
+            background: #e6dfc8;
+            transform: scale(0.98);
+            cursor: pointer;
+        }
+
+        .copy-button.copied {
+            background: #859900;
+            color: #fdf6e3;
+            border-color: #859900;
+            cursor: pointer;
+        }
     </style>
 </head>
 
 <body>
+    <button class="copy-button" id="copyButton" aria-label="Copy formatted JSON">Copy</button>
     <div id="outputArea" aria-live="polite"></div>
     <textarea class="hidden-input" id="inputText" autocomplete="off" spellcheck="false"></textarea>
 
@@ -74,6 +118,8 @@
 
         const inputText = document.getElementById('inputText');
         const outputArea = document.getElementById('outputArea');
+        const copyButton = document.getElementById('copyButton');
+        let currentFormattedJSON = '';
 
         function formatJSON(jsonString) {
             try {
@@ -87,18 +133,24 @@
         async function updateOutput(jsonString) {
             if (!jsonString || jsonString.trim() === '') {
                 outputArea.innerHTML = '';
+                copyButton.classList.remove('visible');
+                currentFormattedJSON = '';
                 return;
             }
 
             try {
                 const formatted = formatJSON(jsonString);
+                currentFormattedJSON = formatted;
                 const highlighted = await codeToHtml(formatted, {
                     lang: 'json',
                     theme: 'everforest-light'
                 });
                 outputArea.innerHTML = highlighted;
+                copyButton.classList.add('visible');
             } catch (error) {
                 outputArea.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
+                copyButton.classList.remove('visible');
+                currentFormattedJSON = '';
             }
         }
 
@@ -107,6 +159,45 @@
             div.textContent = text;
             return div.innerHTML;
         }
+
+        async function copyToClipboard() {
+            if (!currentFormattedJSON) return;
+
+            try {
+                await navigator.clipboard.writeText(currentFormattedJSON);
+                const originalText = copyButton.textContent;
+                copyButton.textContent = 'Copied!';
+                copyButton.classList.add('copied');
+
+                setTimeout(() => {
+                    copyButton.textContent = originalText;
+                    copyButton.classList.remove('copied');
+                }, 750);
+            } catch (error) {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = currentFormattedJSON;
+                textArea.style.position = 'fixed';
+                textArea.style.opacity = '0';
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    const originalText = copyButton.textContent;
+                    copyButton.textContent = 'Copied!';
+                    copyButton.classList.add('copied');
+                    setTimeout(() => {
+                        copyButton.textContent = originalText;
+                        copyButton.classList.remove('copied');
+                    }, 2000);
+                } catch (err) {
+                    console.error('Failed to copy:', err);
+                }
+                document.body.removeChild(textArea);
+            }
+        }
+
+        copyButton.addEventListener('click', copyToClipboard);
 
         // Handle paste events on the entire page
         document.addEventListener('paste', (e) => {
